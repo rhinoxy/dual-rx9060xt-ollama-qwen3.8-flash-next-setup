@@ -188,12 +188,62 @@ curl http://localhost:11434/api/generate -d '{
 
 ## 📊 Summary of Models Tested
 
-| Model | Size | Quant | GPU Layers (`num_gpu`) | VRAM Used | CPU RAM Used | Context | Stability |
+| Model | Size | Quant | GPU Offload | VRAM Used | CPU RAM Used | Context | Stability & Performance |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwen 3.8 27B** | 27 GB | Q4_K_M | 33 (Full GPU offload) | 22 GB (across 2 GPUs) | ~4 GB | 32K | 100% Stable (No reset) |
-| **Qwen 3.8 Flash Next** | 104 GB | UD-Q4_K_XL | 14 layers | 21.6 GB (across 2 GPUs) | ~84 GB | 32K | 100% Stable (Fast hybrid) |
+| **Qwen 3.8 27B** | 27 GB | Q4_K_M | 73% GPU / 27% CPU | ~24.2 GB (across 2 GPUs) | ~6 GB | **48K** (`49152`) | **100% Stable** (~12 tok/s, ~308 tok/s prompt eval) |
+| **Qwen 3.8 Flash Next** | 104 GB | UD-Q4_K_XL | 14 layers (~49% GPU) | ~21.6 GB (across 2 GPUs) | ~84 GB | **32K** (`32768`) | **100% Stable** (High-quality MoE reasoning) |
+
+---
+
+## 🧠 Deep Dive: Context Window Tuning & The "Hidden Memory"
+
+### Why 262K and 128K Fail on 32GB VRAM
+When configuring context length, it is tempting to assume that only KV cache scales with context tokens. However, in `llama.cpp` and Ollama:
+1. **Self-Attention Compute/Graph Buffer**: To calculate attention matrices across long sequences, temporary tensor compute buffers are reserved. At 128K context, this buffer alone requires **~14.6 GB** across the 2 GPUs!
+2. **Multimodal Projector (`mmproj`) & MTP**: Vision projection tensors (~5.5 GB) and speculative decoding buffers add several gigabytes.
+
+| Context Size | Total VRAM Required | Available on Dual RX 9060 XT | Outcome |
+| :--- | :--- | :--- | :--- |
+| **262K** (`262144`) | **~47.0 GB** | 31.4 GB | ❌ OOM (`cudaMalloc failed: out of memory`) |
+| **128K** (`131072`) | **~45.6 GB** | 31.4 GB | ❌ OOM (-14.2 GB shortfall) |
+| **64K** (`65536`) | **~31.6 GB** | 31.4 GB | ❌ OOM (Exceeds by only ~200 MB) |
+| **48K** (`49152`) | **~24.2 GB** | 31.4 GB | 🟢 **Optimal Sweet Spot (Zero OOM, fast, safe headroom)** |
+| **32K** (`32768`) | **~21.6 GB** | 31.4 GB | 🟢 **Ultra-safe (Large headroom for display)** |
+
+---
+
+## 🦞 OpenClaw Agent Integration
+
+OpenClaw embeds full system instructions, tool definitions (browser, memory, files, search), and agent personas into every turn (initial prompt size: ~25,000 tokens).
+
+### Preventing "The agent run failed before producing a reply"
+If OpenClaw requests `num_ctx: 262144`, Ollama will fail with HTTP 500. Configure `~/.openclaw/openclaw.json` with **48K context**:
+
+```json
+{
+  "models": {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://127.0.0.1:11434",
+        "models": [
+          {
+            "id": "qwen3.8:27b",
+            "name": "qwen3.8:27b",
+            "reasoning": true,
+            "contextWindow": 49152,
+            "params": {
+              "num_ctx": 49152
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
 
 ---
 
 ## 📜 License
 MIT License. Feel free to use and adapt these configurations for your own multi-GPU RDNA 4 setups.
+
