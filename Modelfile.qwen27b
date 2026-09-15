@@ -1,0 +1,13 @@
+# Modelfile for Qwen 3.8 27B on Dual Radeon RX 9060 XT (16GB x 2)
+# Optimized for high-throughput prompt processing and rock-solid stability in OpenClaw
+FROM qwen3.8:27b
+
+# Offload 36 layers to GPU (~56% GPU offload, ~10-13GB VRAM per GPU)
+# Leaves 4-7GB of compute buffer margin on each GPU to prevent long-context graph allocation OOM
+PARAMETER num_gpu 36
+
+# Context window size optimized for ROCm Attention kernels (16K tokens)
+PARAMETER num_ctx 16384
+
+# Physical CPU threads (Xeon E5-2687W v4 x 2 = 24 physical cores)
+PARAMETER num_thread 24

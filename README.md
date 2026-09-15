@@ -230,7 +230,7 @@ When configuring context length, it is tempting to assume that only KV cache sca
 OpenClaw embeds full system instructions, tool definitions (browser, memory, files, search), and agent personas into every turn (initial prompt size: ~25,000 tokens).
 
 ### Preventing "The agent run failed before producing a reply"
-If OpenClaw requests `num_ctx: 262144`, Ollama will fail with HTTP 500. Configure `~/.openclaw/openclaw.json` with **48K context**:
+In ROCm HIP attention kernels, sequence evaluation beyond 16,384 tokens triggers `illegal memory access`. Configure `~/.openclaw/openclaw.json` with **16K context** (`16384`), allowing OpenClaw's context manager to automatically compress tools and message history:
 
 ```json
 {
@@ -243,9 +243,9 @@ If OpenClaw requests `num_ctx: 262144`, Ollama will fail with HTTP 500. Configur
             "id": "qwen3.8:27b",
             "name": "qwen3.8:27b",
             "reasoning": true,
-            "contextWindow": 49152,
+            "contextWindow": 16384,
             "params": {
-              "num_ctx": 49152
+              "num_ctx": 16384
             }
           }
         ]
