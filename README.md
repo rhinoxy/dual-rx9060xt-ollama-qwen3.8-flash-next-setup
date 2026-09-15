@@ -99,8 +99,8 @@ Environment="OLLAMA_LOAD_TIMEOUT=30m"
 
 ### 1. Clone this Repository
 ```bash
-git clone git@github.com:rhinoxy/dual-rx9060xt-ollama-qwen-setup.git
-cd dual-rx9060xt-ollama-qwen-setup
+git clone git@github.com:rhinoxy/dual-rx9060xt-ollama-qwen3.8-flash-next-setup.git
+cd dual-rx9060xt-ollama-qwen3.8-flash-next-setup
 ```
 
 ### 2. Apply the Ollama Systemd Configuration
