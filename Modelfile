@@ -1,0 +1,13 @@
+# Modelfile for Qwen 3.8 Flash Next (MoE UD-Q4_K_XL) on Dual Radeon RX 9060 XT (16GB x 2)
+# Specify the path to your merged GGUF file
+FROM ./Qwen3.8-Flash-Next-merged.gguf
+
+# Offload 14 layers to GPU (approx 11GB VRAM per GPU across 2x RX 9060 XT)
+# The remaining 34 layers and PLE embeddings reside in 192GB system RAM
+PARAMETER num_gpu 14
+
+# Context window size (32K tokens)
+PARAMETER num_ctx 32768
+
+# Physical CPU threads (Xeon E5-2687W v4 x 2 = 24 physical cores)
+PARAMETER num_thread 24
