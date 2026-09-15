@@ -72,19 +72,22 @@ We resolve this by applying a systemd drop-in override (`/etc/systemd/system/oll
 # (Ollama natively supports gfx1201 / RDNA 4)
 Environment="LD_LIBRARY_PATH=/opt/rocm/lib:/opt/amdgpu/lib/x86_64-linux-gnu"
 
-# 2. Disable Flash Attention to prevent MES hardware scheduler hangs and GPU resets
+# 2. Disable SDMA to prevent illegal memory access across dual-socket Xeon PCIe topology
+Environment="HSA_ENABLE_SDMA=0"
+
+# 3. Disable Flash Attention to prevent MES hardware scheduler hangs and GPU resets
 Environment="OLLAMA_FLASH_ATTENTION=0"
 
-# 3. Spread model layers evenly across both GPUs
+# 4. Spread model layers evenly across both GPUs
 Environment="OLLAMA_SCHED_SPREAD=1"
 
-# 4. Limit loaded models to 1 to prevent VRAM fragmentation and accidental CPU fallback
+# 5. Limit loaded models to 1 to prevent VRAM fragmentation and accidental CPU fallback
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 
-# 5. Reserve 1GB VRAM on GPU 0 to protect display output (Xorg/Wayland)
-Environment="OLLAMA_GPU_OVERHEAD=1073741824"
+# 6. Reserve 2GB VRAM on GPU 0 to protect display output and graph compute buffers
+Environment="OLLAMA_GPU_OVERHEAD=2147483648"
 
-# 6. Extend model loading timeout for large 100GB+ models
+# 7. Extend model loading timeout for large 100GB+ models
 Environment="OLLAMA_LOAD_TIMEOUT=30m"
 ```
 
