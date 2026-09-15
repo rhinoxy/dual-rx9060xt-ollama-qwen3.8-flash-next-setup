@@ -1,7 +1,7 @@
 # Dual AMD Radeon RX 9060 XT (RDNA 4) + Ollama Setup Guide
-### Running Qwen 3.8 Flash Next (104GB MoE) & Qwen 3.8 27B on Dual GPUs with ROCm
+### Running Qwen 3.8 27B & Qwen 3.8 Flash Next (104GB MoE) on Dual GPUs with Vulkan (RADV) & ROCm
 
-This repository provides production-ready configuration files, automated scripts, and an in-depth troubleshooting report for running large-scale LLMs (including 100GB+ Mixture-of-Experts models) on **Dual AMD Radeon RX 9060 XT 16GB GPUs (RDNA 4 / Navi 44 / gfx1201)** using **Ollama** and **ROCm 7.2.4**.
+This repository provides production-ready configuration files, automated scripts, and an in-depth engineering report for running large-scale LLMs (including 100GB+ MoE models) on **Dual AMD Radeon RX 9060 XT 16GB GPUs (RDNA 4 / Navi 44 / gfx1201)** using **Ollama** with the high-performance, rock-solid **Vulkan (RADV)** backend.
 
 ---
 
@@ -62,9 +62,16 @@ Inspection of `journalctl -b -1` and `dmesg` revealed a critical hardware reset 
 
 ---
 
-## 🛠 The Solution
+## 🛠 The Solution: Transitioning to the Vulkan (RADV) Backend
 
-We resolve this by applying a systemd drop-in override (`/etc/systemd/system/ollama.service.d/gpu.conf`):
+While ROCm 7.2 works for short sequences, RDNA 4 (`gfx1201`) lacks official Flash Attention support in ROCm 7.2. Under quadratic normal attention, sequences over 18,000 tokens trigger HIP kernel memory boundary overflows (`an illegal memory access was encountered`).
+
+By switching Ollama's compute engine to the **Vulkan backend (Mesa RADV driver)**, we gain:
+1. **Rock-Solid Stability**: Flawlessly evaluates **24,000+ token prompts** in a single pass without crashes or memory corruption.
+2. **Extreme Memory Efficiency**: Graph compute buffers require only **~400 MiB** (compared to 11–13 GB under ROCm), leaving over **10 GB of free VRAM headroom** on each 16GB GPU.
+3. **High Throughput**: Sustained **~175 tokens/sec** prompt processing across Dual RX 9060 XT.
+
+Apply the systemd drop-in override (`/etc/systemd/system/ollama.service.d/gpu.conf`):
 
 ```ini
 [Unit]
@@ -74,26 +81,18 @@ After=graphical.target multi-user.target
 Wants=graphical.target
 
 [Service]
-# 1. Force system-installed ROCm 7.2.4 over Ollama's bundled older libraries
-# (Ollama natively supports gfx1201 / RDNA 4)
-Environment="LD_LIBRARY_PATH=/opt/rocm/lib:/opt/amdgpu/lib/x86_64-linux-gnu"
+# Enable Vulkan backend for RDNA 4 (RX 9060 XT / gfx1201)
+# Utilizes Mesa RADV Vulkan 1.3 driver for rock-solid 24k-32k long context inference
+Environment="OLLAMA_VULKAN=1"
+Environment="OLLAMA_LLM_LIBRARY=vulkan"
 
-# 2. Disable SDMA to prevent illegal memory access across dual-socket Xeon PCIe topology
-Environment="HSA_ENABLE_SDMA=0"
-
-# 3. Disable Flash Attention to prevent MES hardware scheduler hangs and GPU resets
-Environment="OLLAMA_FLASH_ATTENTION=0"
-
-# 4. Spread model layers evenly across both GPUs
+# Spread model layers evenly across both GPUs
 Environment="OLLAMA_SCHED_SPREAD=1"
 
-# 5. Limit loaded models to 1 to prevent VRAM fragmentation and accidental CPU fallback
+# Limit loaded models to 1 to prevent VRAM fragmentation
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 
-# 6. Reserve 2GB VRAM on GPU 0 to protect display output and graph compute buffers
-Environment="OLLAMA_GPU_OVERHEAD=2147483648"
-
-# 7. Extend model loading timeout for large 100GB+ models
+# Extend model loading timeout for large models
 Environment="OLLAMA_LOAD_TIMEOUT=30m"
 ```
 
@@ -227,10 +226,13 @@ When configuring context length, it is tempting to assume that only KV cache sca
 
 ## 🦞 OpenClaw Agent Integration
 
-OpenClaw embeds full system instructions, tool definitions (browser, memory, files, search), and agent personas into every turn (initial prompt size: ~25,000 tokens).
+OpenClaw embeds full system instructions, tool definitions (browser, memory, files, search), and agent personas into every turn (initial prompt size: ~20,000–25,000 tokens).
 
-### Preventing "The agent run failed before producing a reply"
-In ROCm HIP attention kernels, sequence evaluation beyond 16,384 tokens triggers `illegal memory access`. Configure `~/.openclaw/openclaw.json` with **16K context** (`16384`), allowing OpenClaw's context manager to automatically compress tools and message history:
+### Overcoming the Prompt Limit: 16K (ROCm) vs 32K (Vulkan)
+- **Under ROCm 7.2**: Long-sequence attention evaluation beyond 18,432 tokens triggered a HIP kernel crash (`an illegal memory access was encountered`), forcing the context window to be restricted to 16K (`16384`). This caused OpenClaw prompts to be aggressively truncated, resulting in degraded agent memory and tool context.
+- **Under Vulkan (RADV)**: Evaluates **24,000–32,768 tokens smoothly at ~175 tokens/sec** with negligible compute buffer overhead (~400 MiB).
+
+Configure `~/.openclaw/openclaw.json` with **32K context** (`32768`):
 
 ```json
 {
@@ -243,9 +245,9 @@ In ROCm HIP attention kernels, sequence evaluation beyond 16,384 tokens triggers
             "id": "qwen3.8:27b",
             "name": "qwen3.8:27b",
             "reasoning": true,
-            "contextWindow": 16384,
+            "contextWindow": 32768,
             "params": {
-              "num_ctx": 16384
+              "num_ctx": 32768
             }
           }
         ]

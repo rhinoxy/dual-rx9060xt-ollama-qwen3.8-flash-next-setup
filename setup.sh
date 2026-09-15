@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # setup.sh
-# Applies systemd drop-in configuration for Ollama to enable stable multi-GPU
-# ROCm inference on AMD Radeon RX 9060 XT (RDNA 4 / Navi 44 / gfx1201).
+# Applies systemd drop-in configuration for Ollama to enable high-performance,
+# stable multi-GPU inference on AMD Radeon RX 9060 XT (RDNA 4) via Vulkan (RADV).
 # ==============================================================================
 
 set -euo pipefail
