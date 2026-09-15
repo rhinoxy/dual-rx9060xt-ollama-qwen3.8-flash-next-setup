@@ -1,10 +1,14 @@
 # Modelfile for Qwen 3.8 27B on Dual Radeon RX 9060 XT (16GB x 2)
-# Optimized for high-throughput prompt processing and rock-solid stability in OpenClaw
+# Fully offloads all 65 layers to Dual GPUs via Vulkan (RADV) backend
 FROM qwen3.8:27b
+
+# Fully offload all layers to GPU (100% GPU offload, zero CPU layer fallback)
+PARAMETER num_gpu 99
 
 # Context window size: 32K tokens supported natively on Vulkan (RADV) backend
 PARAMETER num_ctx 32768
 
-# Physical CPU threads (Xeon E5-2687W v4 x 2 = 24 physical cores)
+# Physical CPU threads
 PARAMETER num_thread 24
+
 

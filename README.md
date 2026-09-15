@@ -202,7 +202,7 @@ curl http://localhost:11434/api/generate -d '{
 
 | Model | Size | Quant | GPU Offload | VRAM Used | CPU RAM Used | Context | Stability & Performance |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwen 3.8 27B** | 27 GB | Q4_K_M | 73% GPU / 27% CPU | ~24.2 GB (across 2 GPUs) | ~6 GB | **48K** (`49152`) | **100% Stable** (~12 tok/s, ~308 tok/s prompt eval) |
+| **Qwen 3.8 27B** | 17 GB | Q4_K_M | **100% GPU** (All 65 layers) | ~22.6 GB (~11.3 GB/GPU) | **0 GB** | **32K** (`32768`) | **100% Stable (~20–22 tok/s generation, ~175 tok/s eval)** |
 | **Qwen 3.8 Flash Next** | 104 GB | UD-Q4_K_XL | 14 layers (~49% GPU) | ~21.6 GB (across 2 GPUs) | ~84 GB | **32K** (`32768`) | **100% Stable** (High-quality MoE reasoning) |
 
 ---
