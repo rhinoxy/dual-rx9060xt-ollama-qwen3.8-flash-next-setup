@@ -68,25 +68,23 @@ We resolve this by applying a systemd drop-in override (`/etc/systemd/system/oll
 
 ```ini
 [Service]
-# 1. Override GFX target to gfx1100 for RDNA 4 / RX 9060 XT compatibility with ROCm runtime
-Environment="HSA_OVERRIDE_GFX_VERSION=11.0.0"
-
-# 2. Force system-installed ROCm 7.2.4 over Ollama's bundled older libraries
+# 1. Force system-installed ROCm 7.2.4 over Ollama's bundled older libraries
+# (Ollama natively supports gfx1201 / RDNA 4)
 Environment="LD_LIBRARY_PATH=/opt/rocm/lib:/opt/amdgpu/lib/x86_64-linux-gnu"
 
-# 3. Disable Flash Attention to prevent MES hardware scheduler hangs and GPU resets
+# 2. Disable Flash Attention to prevent MES hardware scheduler hangs and GPU resets
 Environment="OLLAMA_FLASH_ATTENTION=0"
 
-# 4. Spread model layers evenly across both GPUs
+# 3. Spread model layers evenly across both GPUs
 Environment="OLLAMA_SCHED_SPREAD=1"
 
-# 5. Limit loaded models to 1 to prevent VRAM fragmentation and accidental CPU fallback
+# 4. Limit loaded models to 1 to prevent VRAM fragmentation and accidental CPU fallback
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 
-# 6. Reserve 1GB VRAM on GPU 0 to protect display output (Xorg/Wayland)
+# 5. Reserve 1GB VRAM on GPU 0 to protect display output (Xorg/Wayland)
 Environment="OLLAMA_GPU_OVERHEAD=1073741824"
 
-# 7. Extend model loading timeout for large 100GB+ models
+# 6. Extend model loading timeout for large 100GB+ models
 Environment="OLLAMA_LOAD_TIMEOUT=30m"
 ```
 
@@ -256,11 +254,9 @@ If OpenClaw requests `num_ctx: 262144`, Ollama will fail with HTTP 500. Configur
 OpenClaw responds extremely slowly (taking 5–10 minutes or failing with timeout), and CPU usage spikes to ~2400% (all CPU cores maxed out) while GPU usage remains at 0–2%. `ollama ps` shows `100% CPU` instead of `73% GPU / 27% CPU`.
 
 ### Root Cause
-1. **Missing `HSA_OVERRIDE_GFX_VERSION=11.0.0`**:
-   Ollama's bundled ROCm runtime (`rocm_v7_2`) expects RDNA 3/gfx1100 targets. Without this override, GPU probing fails to match binary architectures.
-2. **GPU Discovery Watchdog Timeout**:
-   During system boot or under heavy disk I/O, Ollama's internal `llama-server` discovery watchdog (30s timeout) may expire (`llama-server GPU discovery watchdog timed out: context deadline exceeded`). Ollama caches this failure and permanently runs in **CPU-only mode** until restarted.
-3. **Multi-Instance VRAM Contention**:
+1. **GPU Discovery Watchdog Timeout during Boot**:
+   Ollama natively supports **`gfx1201`** (RDNA 4). However, during system boot or high disk I/O, the non-display GPU (GPU 1) may be in runtime power-save sleep (`D3cold`). When Ollama initiates GPU discovery at boot, resuming the second GPU alongside heavy disk I/O took ~35 seconds, exceeding the internal 30-second watchdog timer (`llama-server GPU discovery watchdog timed out: context deadline exceeded`). Ollama permanently caches this failure and falls back to **CPU-only mode** until restarted.
+2. **Multi-Instance VRAM Contention**:
    Without `OLLAMA_MAX_LOADED_MODELS=1`, a previous model in VRAM can push subsequent requests to allocate 64 out of 66 layers onto CPU.
 
 ### Performance Impact
@@ -270,10 +266,10 @@ OpenClaw responds extremely slowly (taking 5–10 minutes or failing with timeou
 | **Dual RX 9060 XT (ROCm 7.2.4)** | **~308 tokens/sec** | **~80 seconds** | 🟢 **Success (Silky smooth response)** |
 
 ### Solution
-Ensure `gpu.conf` contains `HSA_OVERRIDE_GFX_VERSION=11.0.0` and `OLLAMA_MAX_LOADED_MODELS=1`, then reload and restart:
+Restart the Ollama service once the system is fully booted and GPUs are active:
 ```bash
-sudo ./setup.sh
-# Check that ROCm devices are recognized:
+sudo systemctl restart ollama
+# Verify that both ROCm devices are recognized:
 journalctl -u ollama -n 30 --no-pager | grep -i "inference compute"
 ```
 
