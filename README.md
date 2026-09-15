@@ -67,6 +67,12 @@ Inspection of `journalctl -b -1` and `dmesg` revealed a critical hardware reset 
 We resolve this by applying a systemd drop-in override (`/etc/systemd/system/ollama.service.d/gpu.conf`):
 
 ```ini
+[Unit]
+# Ensure Ollama starts only after desktop, graphics drivers, and system services are fully ready
+# This prevents GPU discovery watchdog timeouts during boot I/O spikes
+After=graphical.target multi-user.target
+Wants=graphical.target
+
 [Service]
 # 1. Force system-installed ROCm 7.2.4 over Ollama's bundled older libraries
 # (Ollama natively supports gfx1201 / RDNA 4)
